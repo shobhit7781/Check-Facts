@@ -45,6 +45,7 @@ export default async function handler(req, res) {
 
   const allowedModels = new Set(['llama-3.3-70b-versatile', 'groq/compound', 'groq/compound-mini']);
   const chosenModel = allowedModels.has(model) ? model : 'llama-3.3-70b-versatile';
+  const isCompound = chosenModel.startsWith('groq/compound');
 
   try {
     const upstream = await fetch(GROQ_URL, {
@@ -58,6 +59,10 @@ export default async function handler(req, res) {
         messages,
         temperature: 0.1,
         max_tokens: 1024,
+        // Restrict compound to plain web search — skip visit_website/code
+        // execution, which can pull full page content and balloon the
+        // response on claims with little or no evidence to find.
+        ...(isCompound ? { compound_custom: { tools: { enabled_tools: ['web_search'] } } } : {}),
       }),
     });
 
@@ -68,7 +73,12 @@ export default async function handler(req, res) {
       return res.status(upstream.status).json({ error: msg });
     }
 
-    return res.status(200).json(data);
+    // Forward only what the frontend needs — never the raw Groq payload.
+    // The full response (especially executed_tools, which can carry large
+    // tool-call traces) is what was triggering "Request Entity Too Large".
+    const choiceMsg = data.choices?.[0]?.message || {};
+    const usedSearch = Array.isArray(choiceMsg.executed_tools) && choiceMsg.executed_tools.length > 0;
+    return res.status(200).json({ content: choiceMsg.content || '', usedSearch });
   } catch (err) {
     return res.status(502).json({ error: 'Failed to reach Groq: ' + (err?.message || 'unknown error') });
   }
