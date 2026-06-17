@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FactCheck Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080c14;
+    --surface: rgba(255,255,255,0.04);
+    --surface-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --border-bright: rgba(255,255,255,0.15);
+    --text: #f0f2f7;
+    --muted: #6b7280;
+    --accent: #6366f1;
+    --accent-glow: rgba(99,102,241,0.3);
+    --verified: #10b981;
+    --verified-bg: rgba(16,185,129,0.08);
+    --verified-border: rgba(16,185,129,0.2);
+    --inaccurate: #f59e0b;
+    --inaccurate-bg: rgba(245,158,11,0.08);
+    --inaccurate-border: rgba(245,158,11,0.2);
+    --false: #ef4444;
+    --false-bg: rgba(239,68,68,0.08);
+    --false-border: rgba(239,68,68,0.2);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    background: radial-gradient(ellipse, rgba(99,102,241,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  header {
+    padding: 56px 0 48px;
+    text-align: center;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(99,102,241,0.12);
+    border: 1px solid rgba(99,102,241,0.25);
+    border-radius: 100px;
+    padding: 5px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #818cf8;
+    margin-bottom: 24px;
+  }
+
+  .badge-dot {
+    width: 6px; height: 6px;
+    background: #818cf8;
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(36px, 6vw, 56px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #f0f2f7 0%, #818cf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 14px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed var(--border-bright);
+    border-radius: 20px;
+    padding: 52px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .upload-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(99,102,241,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.06);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 40px rgba(99,102,241,0.15);
+  }
+
+  .upload-icon {
+    width: 56px; height: 56px;
+    background: rgba(99,102,241,0.12);
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 18px;
+    font-size: 24px;
+  }
+
+  .upload-zone h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .upload-zone p {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 12px;
+    padding: 13px 28px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+
+  .btn-primary:hover {
+    background: #4f46e5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 24px var(--accent-glow);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Progress */
+  .progress-wrap {
+    margin-bottom: 32px;
+    display: none;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .progress-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 100px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #818cf8);
+    border-radius: 100px;
+    transition: width 0.4s ease;
+    width: 0%;
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  .status-text {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 10px;
+    min-height: 20px;
+  }
+
+  /* Summary cards */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+    display: none;
+  }
+
+  .summary-card {
+    border-radius: 16px;
+    padding: 22px 20px;
+    text-align: center;
+    border: 1px solid;
+    backdrop-filter: blur(12px);
+  }
+
+  .summary-card.verified { background: var(--verified-bg); border-color: var(--verified-border); }
+  .summary-card.inaccurate { background: var(--inaccurate-bg); border-color: var(--inaccurate-border); }
+  .summary-card.false { background: var(--false-bg); border-color: var(--false-border); }
+
+  .summary-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .verified .summary-num { color: var(--verified); }
+  .inaccurate .summary-num { color: var(--inaccurate); }
+  .false .summary-num { color: var(--false); }
+
+  .summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Results */
+  .results-header {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: none;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: border-color 0.2s, background 0.2s;
+    backdrop-filter: blur(8px);
+    animation: fadeUp 0.3s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-card:hover { background: var(--surface-hover); }
+  .result-card.verified { border-color: var(--verified-border); }
+  .result-card.inaccurate { border-color: var(--inaccurate-border); }
+  .result-card.false { border-color: var(--false-border); }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .verdict-pill {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .pill-verified { background: var(--verified-bg); color: var(--verified); border: 1px solid var(--verified-border); }
+  .pill-inaccurate { background: var(--inaccurate-bg); color: var(--inaccurate); border: 1px solid var(--inaccurate-border); }
+  .pill-false { background: var(--false-bg); color: var(--false); border: 1px solid var(--false-border); }
+
+  .result-claim {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .chevron {
+    flex-shrink: 0;
+    color: var(--muted);
+    font-size: 12px;
+    transition: transform 0.2s;
+  }
+
+  .result-body {
+    padding: 0 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+
+  .result-body.open {
+    padding: 0 20px 18px;
+    max-height: 300px;
+  }
+
+  .result-divider {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 16px;
+  }
+
+  .detail-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  .detail-text {
+    font-size: 13px;
+    color: #d1d5db;
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+
+  .correct-fact {
+    background: rgba(16,185,129,0.06);
+    border: 1px solid var(--verified-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--verified);
+    line-height: 1.6;
+  }
+
+  /* File selected state */
+  .file-selected {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .file-icon { font-size: 20px; }
+
+  .file-info { flex: 1; }
+  .file-name { font-size: 14px; font-weight: 500; color: var(--text); }
+  .file-size { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .file-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px;
+    border-radius: 6px;
+    transition: color 0.2s;
+  }
+  .file-remove:hover { color: var(--false); }
+
+  @media (max-width: 600px) {
+    .summary { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .summary-num { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="badge"><span class="badge-dot"></span>AI-Powered Verification</div>
+    <h1>FactCheck Agent</h1>
+    <p class="subtitle">Upload a PDF. We extract every claim, search the live web, and tell you what's true. No sign-up or API key needed.</p>
+  </header>
+
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".pdf" />
+    <div class="upload-icon">📄</div>
+    <h3>Drop your PDF here</h3>
+    <p>or click to browse</p>
+  </div>
+
+  <div class="file-selected" id="fileSelected">
+    <span class="file-icon">📄</span>
+    <div class="file-info">
+      <div class="file-name" id="fileName"></div>
+      <div class="file-size" id="fileSize"></div>
+    </div>
+    <button class="file-remove" id="fileRemove">✕</button>
+  </div>
+
+  <div style="text-align:center; margin-bottom: 32px;">
+    <button class="btn-primary" id="analyzeBtn" disabled>Analyse PDF</button>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label">
+      <span id="progressLabel">Extracting claims...</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="status-text" id="statusText"></div>
+  </div>
+
+  <div class="summary" id="summary">
+    <div class="summary-card verified">
+      <div class="summary-num" id="countVerified">0</div>
+      <div class="summary-label">Verified</div>
+    </div>
+    <div class="summary-card inaccurate">
+      <div class="summary-num" id="countInaccurate">0</div>
+      <div class="summary-label">Inaccurate</div>
+    </div>
+    <div class="summary-card false">
+      <div class="summary-num" id="countFalse">0</div>
+      <div class="summary-label">False</div>
+    </div>
+  </div>
+
+  <div class="results-header" id="resultsHeader">Claim Breakdown</div>
+  <div id="results"></div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let selectedFile = null;
+
+const fileInput    = document.getElementById('fileInput');
+const uploadZone   = document.getElementById('uploadZone');
+const fileSelected = document.getElementById('fileSelected');
+const fileName     = document.getElementById('fileName');
+const fileSize     = document.getElementById('fileSize');
+const fileRemove   = document.getElementById('fileRemove');
+const analyzeBtn   = document.getElementById('analyzeBtn');
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function setFile(file) {
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = formatSize(file.size);
+  uploadZone.style.display = 'none';
+  fileSelected.style.display = 'flex';
+  checkReady();
+}
+
+fileInput.addEventListener('change', e => { if (e.target.files[0]) setFile(e.target.files[0]); });
+
+fileRemove.addEventListener('click', () => {
+  selectedFile = null;
+  fileInput.value = '';
+  uploadZone.style.display = '';
+  fileSelected.style.display = 'none';
+  checkReady();
+});
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') setFile(f);
+});
+
+function checkReady() {
+  analyzeBtn.disabled = !selectedFile;
+}
+
+function setProgress(pct, label, status) {
+  if (pct !== null && pct !== undefined) {
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = pct + '%';
+  }
+  if (label) document.getElementById('progressLabel').textContent = label;
+  if (status !== undefined) document.getElementById('statusText').textContent = status;
+}
+
+async function extractTextFromPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(s => s.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+// ── Calls our own backend, which holds the Groq key server-side ────────────
+// model: 'llama-3.3-70b-versatile' for plain reasoning (claim extraction),
+// 'groq/compound' for verification — that model has real, built-in web
+// search, so no separate scraping code is needed here at all.
+async function callAI(messages, model) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err?.error || `HTTP ${res.status}`;
+      if (res.status === 429) {
+        for (let s = 10; s > 0; s--) {
+          setProgress(null, null, `Rate limited — retrying in ${s}s (attempt ${attempt}/3)…`);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        continue;
+      }
+      throw new Error(msg);
+    }
+
+    const data = await res.json();
+    const choice = data.choices?.[0];
+    const text = choice?.message?.content;
+    if (!text) throw new Error('Empty response from server');
+    const usedSearch = Array.isArray(choice?.message?.executed_tools) && choice.message.executed_tools.length > 0;
+    return { text, usedSearch };
+  }
+  throw new Error('Rate limited after 3 attempts — wait a minute and try again');
+}
+
+function parseJSON(raw) {
+  let s = (raw || '').trim();
+  s = s.replace(/^```[a-z]*\n?/i, '').replace(/```\s*$/i, '').trim();
+  // Find first [ or {
+  const a = s.indexOf('['), o = s.indexOf('{');
+  const start = a === -1 ? o : o === -1 ? a : Math.min(a, o);
+  if (start > 0) s = s.slice(start);
+  return JSON.parse(s);
+}
+
+function addResult(claim, verdict, explanation, correctFact, usedSearch, index) {
+  const v = verdict.toLowerCase();
+  const pillClass = v === 'verified' ? 'pill-verified' : v === 'inaccurate' ? 'pill-inaccurate' : 'pill-false';
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const card = document.createElement('div');
+  card.className = `result-card ${v}`;
+  card.style.animationDelay = (index * 0.05) + 's';
+  card.innerHTML = `
+    <div class="result-header" onclick="toggleCard(this)">
+      <span class="verdict-pill ${pillClass}">${verdict}</span>
+      <span class="result-claim">${esc(claim)}</span>
+      <span class="chevron" id="chev-${index}">▼</span>
+    </div>
+    <div class="result-body" id="body-${index}">
+      <div class="result-divider"></div>
+      <div class="detail-label">Explanation ${usedSearch ? '· 🔎 verified against live web search' : ''}</div>
+      <div class="detail-text">${esc(explanation)}</div>
+      ${correctFact ? `<div class="detail-label">Correct Fact</div><div class="correct-fact">${esc(correctFact)}</div>` : ''}
+    </div>`;
+  document.getElementById('results').appendChild(card);
+}
+
+window.toggleCard = function(header) {
+  const body = header.nextElementSibling;
+  const isOpen = body.classList.contains('open');
+  document.querySelectorAll('.result-body.open').forEach(b => {
+    b.classList.remove('open');
+    b.previousElementSibling.querySelector('.chevron').style.transform = '';
+  });
+  if (!isOpen) {
+    body.classList.add('open');
+    header.querySelector('.chevron').style.transform = 'rotate(180deg)';
+  }
+};
+
+analyzeBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  analyzeBtn.disabled = true;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('summary').style.display = 'none';
+  document.getElementById('resultsHeader').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'block';
+  setProgress(5, 'Extracting text from PDF...', '');
+
+  // 1. Extract PDF text
+  let text;
+  try {
+    text = await extractTextFromPDF(selectedFile);
+  } catch(e) {
+    setProgress(0, 'Error', 'Could not read PDF: ' + e.message);
+    analyzeBtn.disabled = false;
+    return;
+  }
+
+  setProgress(15, 'Identifying claims with AI...', `Extracted ${text.length.toLocaleString()} characters`);
+
+  // 2. Extract claims (no web search needed here — plain reasoning model)
+  let claims;
+  try {
+    const { text: raw } = await callAI([
+      {
+        role: 'system',
+        content: 'You are a fact-checking assistant. Return ONLY valid JSON, no markdown, no explanation.'
+      },
+      {
+        role: 'user',
+        content: `Extract up to 10 specific verifiable claims from the text below.
+Focus on: statistics, percentages, dates, financial figures, numerical data, named facts.
+Return ONLY a JSON array: [{"claim": "exact claim as stated", "context": "one sentence of context"}]
+
+Text:
+${text.slice(0, 6000)}`
+      }
+    ], 'llama-3.3-70b-versatile');
+
+    claims = parseJSON(raw);
+    if (!Array.isArray(claims) || claims.length === 0) throw new Error('No verifiable claims found in document.');
+    setProgress(25, `Verifying ${claims.length} claims with live web search...`, `Found ${claims.length} claims to check`);
+  } catch(e) {
+    setProgress(0, 'Error', 'Claim extraction failed: ' + e.message);
+    analyzeBtn.disabled = false;
+    return;
+  }
+
+  // Show summary + results section
+  document.getElementById('summary').style.display = 'grid';
+  document.getElementById('resultsHeader').style.display = 'block';
+
+  let verified = 0, inaccurate = 0, falseCt = 0;
+
+  // 3. Verify each claim with web search
+  for (let i = 0; i < claims.length; i++) {
+    const { claim, context } = claims[i];
+    const pct = 25 + Math.round(((i + 1) / claims.length) * 72);
+    setProgress(pct, `Verifying claim ${i + 1} of ${claims.length}...`, claim.slice(0, 80) + (claim.length > 80 ? '…' : ''));
+
+    try {
+      const { text: raw, usedSearch } = await callAI([
+        {
+          role: 'system',
+          content: 'You are a rigorous fact-checker. Use web search to verify claims against current, real-world data — never rely on memory alone for stats, dates, or figures. Return ONLY valid JSON, no markdown.'
+        },
+        {
+          role: 'user',
+          content: `Search the web and verify this claim:
+
+Claim: "${claim}"
+Context: "${context || ''}"
+
+Be strict — if a statistic is outdated or a number is wrong, mark it Inaccurate or False.
+
+Return ONLY this JSON:
+{"verdict": "Verified" or "Inaccurate" or "False", "explanation": "1-2 sentences with specific evidence from your search", "correct_fact": "the real fact if wrong, else empty string"}`
+        }
+      ], 'groq/compound');
+
+      const result = parseJSON(raw);
+      const v = result.verdict || 'False';
+      if (v === 'Verified') verified++;
+      else if (v === 'Inaccurate') inaccurate++;
+      else falseCt++;
+      document.getElementById('countVerified').textContent = verified;
+      document.getElementById('countInaccurate').textContent = inaccurate;
+      document.getElementById('countFalse').textContent = falseCt;
+      addResult(claim, v, result.explanation || '', result.correct_fact || '', usedSearch, i);
+    } catch(e) {
+      falseCt++;
+      document.getElementById('countFalse').textContent = falseCt;
+      addResult(claim, 'False', 'Verification error: ' + e.message, '', false, i);
+    }
+
+    // Small delay to avoid rate limits
+    if (i < claims.length - 1) await new Promise(r => setTimeout(r, 300));
+  }
+
+  setProgress(100, 'Done', `Checked ${claims.length} claims — ${verified} verified, ${inaccurate} inaccurate, ${falseCt} false.`);
+  analyzeBtn.disabled = false;
+  checkReady();
+});
+</script>
+</body>
+</html>
