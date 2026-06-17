@@ -590,11 +590,9 @@ async function callAI(messages, model) {
     }
 
     const data = await res.json();
-    const choice = data.choices?.[0];
-    const text = choice?.message?.content;
+    const text = data.content;
     if (!text) throw new Error('Empty response from server');
-    const usedSearch = Array.isArray(choice?.message?.executed_tools) && choice.message.executed_tools.length > 0;
-    return { text, usedSearch };
+    return { text, usedSearch: !!data.usedSearch };
   }
   throw new Error('Rate limited after 3 attempts — wait a minute and try again');
 }
