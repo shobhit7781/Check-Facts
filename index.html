@@ -430,6 +430,26 @@
   }
   .file-remove:hover { color: var(--false); }
 
+  
+.sources {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+.source-link {
+  color:#818cf8;
+  text-decoration:none;
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:8px;
+  border:1px solid rgba(129,140,248,.25);
+}
+.source-link:hover {
+  background:rgba(129,140,248,.08);
+}
+
+
   @media (max-width: 600px) {
     .summary { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .summary-num { font-size: 28px; }
@@ -460,8 +480,9 @@
     <button class="file-remove" id="fileRemove">✕</button>
   </div>
 
-  <div style="text-align:center; margin-bottom: 32px;">
+  <div style="text-align:center; margin-bottom: 32px; display:flex; justify-content:center; gap:12px;">
     <button class="btn-primary" id="analyzeBtn" disabled>Analyse PDF</button>
+    <button class="btn-primary" id="exportBtn" style="display:none;">Export Report</button>
   </div>
 
   <div class="progress-wrap" id="progressWrap">
@@ -496,6 +517,7 @@
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 let selectedFile = null;
+let reportResults = [];
 
 const fileInput    = document.getElementById('fileInput');
 const uploadZone   = document.getElementById('uploadZone');
